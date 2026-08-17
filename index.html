@@ -1,0 +1,1800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Mess Ledger</title>
+<meta name="description" content="Track meals, guest meals, fund contributions and expenses for your private mess.">
+<meta name="theme-color" content="#1F3D34">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mess Ledger">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ledger-green:#1F3D34;
+    --ledger-green-light:#2F5647;
+    --ledger-green-dark:#152A24;
+    --paper:#F5F0E1;
+    --paper-white:#FFFDF7;
+    --paper-line:#DED5B9;
+    --ink:#2A2620;
+    --ink-soft:#726A57;
+    --debit-red:#9C3B2E;
+    --debit-red-bg:#F4E4DF;
+    --credit-green:#3C6E4F;
+    --credit-green-bg:#E4EEE4;
+    --brass:#B8863A;
+    --brass-bg:#F1E4C8;
+    --shadow:0 2px 10px rgba(31,61,52,0.12);
+    --radius:10px;
+    --font-display:'Zilla Slab', serif;
+    --font-body:'IBM Plex Sans', sans-serif;
+    --font-mono:'IBM Plex Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%; overflow-x:hidden;}
+  body{
+    font-family:var(--font-body);
+    background:var(--paper);
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+    overscroll-behavior-y:none;
+  }
+  button, input, select{ font-family:inherit; font-size:1rem; color:inherit; }
+  button{ cursor:pointer; }
+  h1,h2,h3{ font-family:var(--font-display); margin:0; }
+  .hidden{ display:none !important; }
+  ::selection{ background:var(--brass-bg); }
+  :focus-visible{ outline:2px solid var(--brass); outline-offset:2px; }
+
+  /* ---------- Loading ---------- */
+  #loadingOverlay{
+    position:fixed; inset:0; background:var(--ledger-green); color:var(--paper-white);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; z-index:999;
+  }
+  .spinner{ width:34px; height:34px; border-radius:50%; border:3px solid rgba(245,240,225,0.25); border-top-color:var(--paper-white); animation:spin 0.9s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  #loadingOverlay .load-word{ font-family:var(--font-display); font-size:1.1rem; letter-spacing:0.04em; text-align:center; padding:0 24px; }
+
+  /* ---------- Setup-needed / error screens ---------- */
+  .info-screen{
+    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:28px 18px;
+    background:var(--ledger-green);
+  }
+  .info-card{
+    width:100%; max-width:460px; background:var(--paper-white); border-radius:14px;
+    box-shadow:0 18px 40px rgba(0,0,0,0.25); padding:30px 26px;
+  }
+  .info-card h2{ color:var(--ledger-green); font-size:1.25rem; margin-bottom:10px; }
+  .info-card p{ font-size:0.9rem; line-height:1.6; color:var(--ink-soft); margin:0 0 12px; }
+  .info-card code, .info-card pre{ font-family:var(--font-mono); font-size:0.8rem; background:var(--paper); padding:2px 5px; border-radius:4px; }
+  .info-card pre{ padding:12px; overflow-x:auto; white-space:pre-wrap; word-break:break-word; }
+
+  /* ---------- Auth / flow screens ---------- */
+  .screen{
+    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:28px 18px;
+    background:
+      radial-gradient(circle at 20% 15%, rgba(255,255,255,0.05), transparent 40%),
+      var(--ledger-green);
+  }
+  .auth-card{
+    width:100%; max-width:420px; background:var(--paper-white); border-radius:14px;
+    box-shadow:0 18px 40px rgba(0,0,0,0.25); padding:32px 26px; position:relative; overflow:hidden;
+  }
+  .auth-card::before{
+    content:""; position:absolute; top:0; left:0; right:0; height:6px; background:var(--brass);
+  }
+  .back-link{ background:none; border:none; color:var(--ink-soft); font-size:0.82rem; font-weight:600; padding:0 0 16px; display:flex; align-items:center; gap:5px; }
+  .back-link:hover{ color:var(--ledger-green); }
+  .brand-block{ text-align:center; margin-bottom:22px; }
+  .brand-title{ font-size:1.7rem; font-weight:700; color:var(--ledger-green); letter-spacing:0.01em; }
+  .brand-title .accent{ color:var(--brass); }
+  .brand-sub{ font-size:0.85rem; color:var(--ink-soft); margin-top:4px; }
+  .field{ margin-bottom:16px; }
+  .field label{ display:block; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); margin-bottom:6px; font-weight:600; }
+  .field input, .field select{
+    width:100%; padding:11px 12px; border:1.5px solid var(--paper-line); border-radius:8px;
+    background:var(--paper); color:var(--ink);
+  }
+  .field input:focus, .field select:focus{ border-color:var(--ledger-green); background:var(--paper-white); }
+  .field-error{ font-size:0.78rem; color:var(--debit-red); margin-top:6px; }
+  .setup-member-row{ display:grid; grid-template-columns:1fr 90px 34px; gap:8px; margin-bottom:10px; align-items:center; }
+  .setup-member-row input{ padding:9px 10px; border:1.5px solid var(--paper-line); border-radius:7px; background:var(--paper); }
+  .row-remove-btn{ background:none; border:none; color:var(--debit-red); padding:6px; border-radius:6px; display:flex; align-items:center; justify-content:center; }
+  .row-remove-btn:hover{ background:var(--debit-red-bg); }
+  .row-remove-btn svg{ width:16px; height:16px; }
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    padding:12px 18px; border-radius:8px; border:1.5px solid transparent; font-weight:600;
+    font-size:0.95rem; transition:transform 0.08s ease; opacity:1;
+  }
+  .btn:disabled{ opacity:0.55; cursor:default; }
+  .btn:active{ transform:scale(0.98); }
+  .btn-block{ width:100%; }
+  .btn-primary{ background:var(--ledger-green); color:var(--paper-white); }
+  .btn-primary:hover{ background:var(--ledger-green-light); }
+  .btn-ghost{ background:transparent; color:var(--ledger-green); border-color:var(--ledger-green); }
+  .btn-ghost:hover{ background:rgba(31,61,52,0.06); }
+  .btn-danger{ background:var(--debit-red); color:#fff; }
+  .btn-danger:hover{ opacity:0.9; }
+  .btn-sm{ padding:8px 12px; font-size:0.85rem; }
+  .btn-text{ background:none; border:none; color:var(--ledger-green); font-weight:600; padding:8px; }
+  .btn svg{ width:16px; height:16px; }
+  .or-divider{ display:flex; align-items:center; gap:10px; margin:16px 0; color:var(--ink-soft); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em; }
+  .or-divider::before, .or-divider::after{ content:""; flex:1; height:1px; background:var(--paper-line); }
+
+  .member-grid{ display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-top:6px; }
+  .member-btn{
+    background:var(--paper); border:1.5px solid var(--paper-line); border-radius:10px;
+    padding:16px 10px; text-align:center; font-weight:600; color:var(--ink); min-width:0;
+  }
+  .member-btn span.mb-label{ display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .member-btn:hover{ border-color:var(--ledger-green); background:var(--paper-white); }
+  .member-avatar{
+    width:38px; height:38px; border-radius:50%; background:var(--ledger-green); color:var(--paper-white);
+    display:flex; align-items:center; justify-content:center; margin:0 auto 8px; font-family:var(--font-display); font-weight:700;
+    flex-shrink:0;
+  }
+  .pin-entry{ margin-top:18px; padding-top:18px; border-top:1px dashed var(--paper-line); }
+  .pin-entry .field input{ letter-spacing:0.5em; text-align:center; font-family:var(--font-mono); font-size:1.2rem; }
+  .link-row{ text-align:center; margin-top:16px; font-size:0.85rem; color:var(--ink-soft); }
+  .sync-note{ display:flex; align-items:center; justify-content:center; gap:6px; font-size:0.78rem; color:var(--ink-soft); margin-top:14px; }
+  .dot{ width:8px; height:8px; border-radius:50%; background:var(--credit-green); flex-shrink:0; }
+  .dot.offline{ background:var(--debit-red); }
+
+  .mess-id-display{
+    font-family:var(--font-mono); font-size:1.9rem; font-weight:700; letter-spacing:0.22em; color:var(--ledger-green);
+    background:var(--paper); border:2px dashed var(--brass); border-radius:10px; padding:16px 8px; margin:14px 0;
+    text-align:center; word-break:break-all;
+  }
+  .mess-id-inline{
+    display:inline-flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:0.78rem;
+    color:var(--ink-soft); background:var(--paper); border-radius:6px; padding:3px 9px; letter-spacing:0.08em;
+  }
+
+  /* ---------- App shell ---------- */
+  #mainApp{ min-height:100vh; display:flex; flex-direction:column; }
+  .topbar{
+    background:var(--ledger-green); color:var(--paper-white); display:flex; align-items:center;
+    justify-content:space-between; padding:14px 18px; position:sticky; top:0; z-index:50;
+    box-shadow:0 2px 8px rgba(0,0,0,0.15); gap:10px;
+  }
+  .brand{ display:flex; flex-direction:column; line-height:1.2; min-width:0; }
+  .brand-mark{ font-family:var(--font-display); font-weight:700; font-size:1.15rem; letter-spacing:0.01em; display:flex; align-items:center; gap:7px; }
+  .brand-mark .accent{ color:var(--brass); }
+  .brand-sub-small{ font-size:0.72rem; color:rgba(245,240,225,0.7); margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .topbar-actions{ display:flex; align-items:center; gap:6px; position:relative; flex-shrink:0; }
+  .icon-btn{
+    background:rgba(245,240,225,0.1); border:none; color:var(--paper-white); width:38px; height:38px;
+    border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .icon-btn:hover{ background:rgba(245,240,225,0.2); }
+  .icon-btn svg{ width:19px; height:19px; }
+  .user-chip{
+    background:rgba(245,240,225,0.1); border:none; color:var(--paper-white); padding:8px 10px 8px 12px;
+    border-radius:20px; display:flex; align-items:center; gap:6px; font-weight:600; font-size:0.88rem; max-width:110px;
+  }
+  .user-chip span.name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .user-menu{
+    position:absolute; top:46px; right:0; background:var(--paper-white); color:var(--ink); border-radius:10px;
+    box-shadow:var(--shadow); min-width:180px; overflow:hidden; z-index:60;
+  }
+  .user-menu button{ width:100%; text-align:left; padding:12px 16px; background:none; border:none; font-size:0.9rem; }
+  .user-menu button:hover{ background:var(--paper); }
+
+  .layout{ flex:1; display:flex; width:100%; max-width:1080px; margin:0 auto; min-width:0; }
+  .content{ flex:1; padding:20px 16px 90px; min-width:0; }
+
+  .tabs{
+    position:fixed; bottom:0; left:0; right:0; background:var(--ledger-green-dark); display:flex;
+    z-index:50; box-shadow:0 -2px 10px rgba(0,0,0,0.2); padding-bottom:env(safe-area-inset-bottom);
+  }
+  .tab-btn{
+    flex:1; background:none; border:none; color:rgba(245,240,225,0.55); padding:10px 4px 8px;
+    display:flex; flex-direction:column; align-items:center; gap:3px; font-size:0.66rem; font-weight:600;
+    letter-spacing:0.01em; border-top:2px solid transparent;
+  }
+  .tab-btn svg{ width:20px; height:20px; }
+  .tab-btn.active{ color:var(--brass); border-top-color:var(--brass); }
+
+  .tab-panel{ display:none; }
+  .tab-panel.active{ display:block; animation:fadeIn 0.25s ease; }
+  @keyframes fadeIn{ from{ opacity:0; transform:translateY(4px);} to{ opacity:1; transform:translateY(0);} }
+
+  .panel-header{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+  .panel-title{ font-size:1.35rem; font-weight:700; color:var(--ledger-green); }
+  .panel-sub{ font-size:0.82rem; color:var(--ink-soft); margin-top:2px; }
+
+  .cards-row{ display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-bottom:22px; }
+  .stat-card{
+    background:var(--paper-white); border-radius:var(--radius); padding:16px; box-shadow:var(--shadow);
+    border-left:4px solid var(--brass); min-width:0;
+  }
+  .stat-card.balance-pos{ border-left-color:var(--credit-green); }
+  .stat-card.balance-neg{ border-left-color:var(--debit-red); }
+  .stat-label{ font-size:0.72rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-soft); font-weight:600; }
+  .stat-value{ font-family:var(--font-mono); font-size:1.4rem; font-weight:600; margin-top:6px; color:var(--ink); overflow-wrap:break-word; }
+  .stat-sub{ font-size:0.75rem; color:var(--ink-soft); margin-top:4px; }
+
+  .section-card{
+    background:var(--paper-white); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); margin-bottom:18px; min-width:0;
+  }
+  .section-card h3{ font-size:1rem; color:var(--ledger-green); margin-bottom:14px; font-weight:700; }
+
+  .form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .form-grid .field{ margin-bottom:0; min-width:0; }
+  .form-grid .field.full{ grid-column:1 / -1; }
+  .form-actions{ display:flex; gap:10px; margin-top:16px; }
+
+  .list-wrap{ margin-top:6px; }
+  .list-row{
+    display:grid; grid-template-columns:70px minmax(0,1fr) auto auto; align-items:center; gap:8px;
+    padding:12px 4px; border-bottom:1px dashed var(--paper-line);
+  }
+  .list-row:last-child{ border-bottom:none; }
+  .list-date{ font-family:var(--font-mono); font-size:0.75rem; color:var(--ink-soft); }
+  .list-main{ min-width:0; }
+  .list-title{ font-weight:600; font-size:0.92rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .list-meta{ font-size:0.76rem; color:var(--ink-soft); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .list-amount{ font-family:var(--font-mono); font-weight:600; font-size:0.92rem; text-align:right; white-space:nowrap; }
+  .list-amount.debit{ color:var(--debit-red); }
+  .list-amount.credit{ color:var(--credit-green); }
+  .row-actions{ display:flex; gap:2px; flex-shrink:0; }
+  .row-actions button{ background:none; border:none; color:var(--ink-soft); padding:6px; border-radius:6px; }
+  .row-actions button:hover{ background:var(--paper); color:var(--ink); }
+  .row-actions svg{ width:15px; height:15px; }
+
+  .empty-state{ text-align:center; padding:30px 10px; color:var(--ink-soft); font-size:0.88rem; }
+
+  /* Meals tab — grid columns use minmax(0,1fr) so long names truncate instead of
+     overflowing the row and dragging the whole page into horizontal scroll. */
+  .meal-member-row{
+    display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:8px;
+    padding:12px 4px; border-bottom:1px dashed var(--paper-line);
+  }
+  .meal-member-row:last-child{ border-bottom:none; }
+  .meal-member-name{ font-weight:600; font-size:0.92rem; display:flex; align-items:center; gap:8px; min-width:0; }
+  .meal-member-name .member-name-text{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  .meal-pill{
+    font-size:0.72rem; font-weight:700; padding:7px 10px; border-radius:20px; border:1.5px solid transparent;
+    min-width:70px; text-align:center; text-transform:uppercase; letter-spacing:0.02em;
+  }
+  .meal-pill.present{ background:var(--credit-green-bg); color:var(--credit-green); border-color:var(--credit-green); }
+  .meal-pill.absent{ background:var(--debit-red-bg); color:var(--debit-red); border-color:var(--debit-red); }
+  .meal-pill-label{ font-size:0.64rem; color:var(--ink-soft); text-align:center; display:block; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.04em; }
+
+  .totals-table{ width:100%; border-collapse:collapse; margin-top:8px; table-layout:fixed; }
+  .totals-table th, .totals-table td{ text-align:left; padding:8px 6px; font-size:0.85rem; border-bottom:1px solid var(--paper-line); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .totals-table th{ color:var(--ink-soft); font-weight:600; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em; }
+  .totals-table td.num, .totals-table th.num{ text-align:right; font-family:var(--font-mono); }
+
+  .settlement-summary{
+    background:var(--ledger-green); color:var(--paper-white); border-radius:var(--radius); padding:16px 18px; margin-bottom:20px;
+    display:grid; grid-template-columns:repeat(3,1fr); gap:10px;
+  }
+  .settlement-summary .s-label{ font-size:0.64rem; text-transform:uppercase; letter-spacing:0.05em; opacity:0.75; }
+  .settlement-summary .s-value{ font-family:var(--font-mono); font-size:1rem; font-weight:600; margin-top:3px; overflow-wrap:break-word; }
+
+  .chit-grid{ display:grid; grid-template-columns:1fr; gap:26px; }
+  @media(min-width:640px){ .chit-grid{ grid-template-columns:1fr 1fr; } }
+  .chit{
+    background:var(--paper-white); border-radius:2px; padding:22px 20px 26px; position:relative;
+    box-shadow:0 6px 16px rgba(31,61,52,0.15); min-width:0;
+  }
+  .chit::before, .chit::after{
+    content:""; position:absolute; left:0; right:0; height:11px;
+    background:radial-gradient(circle at 9px 0, var(--paper) 6px, transparent 7px) repeat-x;
+    background-size:18px 18px;
+  }
+  .chit::before{ top:-1px; }
+  .chit::after{ bottom:-1px; transform:rotate(180deg); }
+  .chit-head{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--paper-line); min-width:0; }
+  .chit-name{ font-family:var(--font-display); font-weight:700; font-size:1.15rem; color:var(--ledger-green); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chit-month{ font-size:0.72rem; color:var(--ink-soft); margin-top:2px; }
+  .chit-row{ display:flex; justify-content:space-between; gap:8px; font-size:0.85rem; padding:5px 0; color:var(--ink-soft); }
+  .chit-row span:first-child{ min-width:0; }
+  .chit-row span:last-child{ font-family:var(--font-mono); color:var(--ink); font-weight:500; white-space:nowrap; }
+  .chit-row.total{ border-top:1px dashed var(--paper-line); margin-top:6px; padding-top:9px; font-weight:700; color:var(--ink); }
+  .chit-row.total span:last-child{ font-weight:700; }
+  .chit-stamp-wrap{ display:flex; justify-content:center; margin-top:16px; }
+  .stamp{
+    display:inline-flex; flex-direction:column; align-items:center; justify-content:center;
+    width:118px; height:118px; border-radius:50%; border:3px solid currentColor; position:relative;
+    transform:rotate(-7deg); font-family:var(--font-display); font-weight:700; opacity:0.9; flex-shrink:0;
+  }
+  .stamp::after{ content:""; position:absolute; inset:6px; border:1px solid currentColor; border-radius:50%; opacity:0.6; }
+  .stamp .stamp-label{ font-size:0.62rem; letter-spacing:0.08em; text-transform:uppercase; }
+  .stamp .stamp-amt{ font-family:var(--font-mono); font-size:1.02rem; margin-top:3px; }
+  .stamp.pay{ color:var(--debit-red); }
+  .stamp.receive{ color:var(--credit-green); }
+  .stamp.settled{ color:var(--brass); }
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(21,42,36,0.55); display:flex; align-items:flex-end;
+    justify-content:center; z-index:200; padding:0;
+  }
+  @media(min-width:640px){ .modal-overlay{ align-items:center; padding:20px; } }
+  .modal{
+    background:var(--paper-white); width:100%; max-width:520px; max-height:88vh; overflow-y:auto;
+    border-radius:16px 16px 0 0; padding:22px 20px calc(22px + env(safe-area-inset-bottom));
+  }
+  @media(min-width:640px){ .modal{ border-radius:14px; } }
+  .modal-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .modal-title{ font-size:1.15rem; font-weight:700; color:var(--ledger-green); }
+  .modal-close{ background:none; border:none; color:var(--ink-soft); padding:6px; border-radius:6px; }
+  .modal-close:hover{ background:var(--paper); }
+  .modal-close svg{ width:18px; height:18px; }
+  .modal-tabs{ display:flex; gap:4px; margin-bottom:16px; border-bottom:1.5px solid var(--paper-line); flex-wrap:wrap; }
+  .modal-tab-btn{ background:none; border:none; padding:10px 4px; margin-right:14px; font-weight:600; font-size:0.85rem; color:var(--ink-soft); border-bottom:2px solid transparent; margin-bottom:-1.5px; }
+  .modal-tab-btn.active{ color:var(--ledger-green); border-bottom-color:var(--brass); }
+  .modal-pane{ display:none; }
+  .modal-pane.active{ display:block; }
+  .modal-body p.hint{ font-size:0.8rem; color:var(--ink-soft); margin:0 0 14px; line-height:1.5; }
+
+  .manage-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 2px; border-bottom:1px dashed var(--paper-line); }
+  .manage-row:last-child{ border-bottom:none; }
+  .manage-name{ font-weight:600; font-size:0.9rem; overflow:hidden; text-overflow:ellipsis; }
+  .manage-meta{ font-size:0.74rem; color:var(--ink-soft); }
+  .manage-actions{ display:flex; gap:2px; flex-shrink:0; }
+  .chip-input-row{ display:flex; gap:8px; margin-top:12px; }
+  .chip-input-row input{ flex:1; padding:9px 10px; border:1.5px solid var(--paper-line); border-radius:7px; background:var(--paper); min-width:0; }
+
+  .toast{
+    position:fixed; bottom:88px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--paper-white);
+    padding:11px 18px; border-radius:24px; font-size:0.85rem; font-weight:600; z-index:300; box-shadow:0 6px 16px rgba(0,0,0,0.25);
+    max-width:88vw; text-align:center;
+  }
+  .toast.error{ background:var(--debit-red); }
+
+  @media(min-width:900px){
+    .layout{ padding-top:10px; }
+    .tabs{
+      position:static; flex-direction:column; width:210px; background:none; box-shadow:none; padding:0 14px 0 0;
+      align-self:flex-start; gap:4px;
+    }
+    .tab-btn{
+      flex-direction:row; justify-content:flex-start; gap:12px; padding:12px 14px; border-radius:8px 0 0 8px;
+      border-top:none; border-left:3px solid transparent; color:var(--ink-soft); font-size:0.85rem;
+      background:var(--paper-white); margin-bottom:2px; box-shadow:0 1px 3px rgba(0,0,0,0.04);
+    }
+    .tab-btn.active{ background:var(--paper-white); color:var(--ledger-green); border-left-color:var(--brass); box-shadow:var(--shadow); }
+    .content{ padding:22px 8px 60px 22px; }
+    .cards-row{ grid-template-columns:repeat(4,1fr); }
+  }
+  @media(prefers-reduced-motion: reduce){
+    *{ animation-duration:0.001ms !important; transition-duration:0.001ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="load-word" id="loadingWord">Opening the ledger…</div>
+</div>
+
+<!-- Setup-needed screen (Firebase config not filled in yet) -->
+<div id="needsSetupScreen" class="info-screen hidden">
+  <div class="info-card">
+    <h2>One-time setup needed</h2>
+    <p>This app syncs mess data through a free Firebase project. Before it will work, open <code>index.html</code> in a text editor and paste your Firebase project's config into the <code>firebaseConfig</code> object near the top of the script.</p>
+    <p>Full step-by-step instructions (creating the project, enabling Anonymous sign-in, setting up Firestore, and the exact security rules to paste) are in <code>README.md</code>, included alongside this file.</p>
+    <p>Once the config is filled in, reload this page.</p>
+  </div>
+</div>
+
+<!-- Connection error screen -->
+<div id="connErrorScreen" class="info-screen hidden">
+  <div class="info-card">
+    <h2>Couldn't connect</h2>
+    <p id="connErrorMessage">Something went wrong connecting to your Firebase project.</p>
+    <p>Double check: Anonymous sign-in is enabled (Authentication → Sign-in method), Firestore Database has been created, and the security rules from <code>README.md</code> have been published.</p>
+    <button class="btn btn-primary" id="connErrorRetryBtn">Try again</button>
+  </div>
+</div>
+
+<!-- Landing screen: create a new mess or join an existing one -->
+<div id="landingScreen" class="screen hidden">
+  <div class="auth-card">
+    <div class="brand-block">
+      <div class="brand-title">Mess <span class="accent">Ledger</span></div>
+      <div class="brand-sub">Track meals, guests, fund and expenses for your private mess.</div>
+    </div>
+    <button class="btn btn-primary btn-block" id="landingCreateBtn">Create a new mess</button>
+    <div class="or-divider">or</div>
+    <div class="field" style="margin-bottom:10px;">
+      <label for="joinMessIdInput">Have a Mess ID?</label>
+      <input id="joinMessIdInput" type="text" maxlength="6" placeholder="e.g. ALPHA7" autocomplete="off" autocapitalize="characters" style="text-transform:uppercase; letter-spacing:0.2em; text-align:center; font-family:var(--font-mono); font-weight:600;">
+    </div>
+    <div id="joinIdError" class="field-error hidden"></div>
+    <button class="btn btn-ghost btn-block" id="landingJoinBtn">Join this mess</button>
+    <div class="sync-note"><span class="dot" id="syncDotLanding"></span><span id="syncTextLanding">Connected</span></div>
+  </div>
+</div>
+
+<!-- Setup screen (create a new mess: name + members) -->
+<div id="setupScreen" class="screen hidden">
+  <div class="auth-card">
+    <button class="back-link" id="setupBackBtn">&larr; Back</button>
+    <div class="brand-block">
+      <div class="brand-title">Create your <span class="accent">mess</span></div>
+      <div class="brand-sub">Give it a name and add everyone staying there.</div>
+    </div>
+    <div class="field">
+      <label for="setupMessName">Mess name</label>
+      <input id="setupMessName" type="text" placeholder="e.g. Green Villa Mess" maxlength="40">
+    </div>
+    <div class="field">
+      <label>Members</label>
+      <div id="setupMembersList"></div>
+      <button type="button" class="btn-text" id="setupAddRowBtn">+ Add another member</button>
+    </div>
+    <div class="field">
+      <label style="margin-bottom:0;">PIN is optional — leave blank to skip login for that member.</label>
+    </div>
+    <button class="btn btn-primary btn-block" id="setupSubmitBtn">Create mess</button>
+  </div>
+</div>
+
+<!-- Mess created confirmation: show the unique ID -->
+<div id="messCreatedScreen" class="screen hidden">
+  <div class="auth-card" style="text-align:center;">
+    <div class="brand-block">
+      <div class="brand-title">Mess <span class="accent">created!</span></div>
+      <div class="brand-sub">Share this ID with your mess-mates so they can join.</div>
+    </div>
+    <div class="mess-id-display" id="createdMessIdText">------</div>
+    <button class="btn btn-ghost btn-block" id="copyMessIdBtn">Copy Mess ID</button>
+    <button class="btn btn-primary btn-block" id="continueToLoginBtn" style="margin-top:10px;">Continue to login</button>
+  </div>
+</div>
+
+<!-- Login screen -->
+<div id="loginScreen" class="screen hidden">
+  <div class="auth-card">
+    <button class="back-link" id="loginBackBtn">&larr; Not your mess</button>
+    <div class="brand-block">
+      <div class="brand-title">Mess <span class="accent">Ledger</span></div>
+      <div class="brand-sub" id="loginMessName">—</div>
+      <div class="mess-id-inline" id="loginMessIdChip">ID: ------</div>
+    </div>
+    <div id="loginMemberGrid" class="member-grid"></div>
+    <div id="pinEntryBlock" class="pin-entry hidden">
+      <div class="field">
+        <label id="pinEntryLabel">Enter PIN</label>
+        <input id="pinEntryInput" type="password" inputmode="numeric" maxlength="4" placeholder="••••">
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-ghost" id="pinCancelBtn" style="flex:1;">Cancel</button>
+        <button class="btn btn-primary" id="pinConfirmBtn" style="flex:1;">Enter</button>
+      </div>
+    </div>
+    <div class="link-row">Not on the list? Ask a mess-mate to add you from Settings → Members.</div>
+    <div class="sync-note"><span class="dot" id="syncDotLogin"></span><span id="syncTextLogin">Synced live across the mess</span></div>
+  </div>
+</div>
+
+<!-- Main app -->
+<div id="mainApp" class="hidden">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark"><span>Mess <span class="accent">Ledger</span></span><span class="dot" id="syncDotTop" title="Live sync status"></span></div>
+      <div class="brand-sub-small" id="messNameDisplay">—</div>
+    </div>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="settingsBtn" aria-label="Settings" title="Settings"></button>
+      <button class="user-chip" id="userChipBtn"><span class="name" id="currentUserName">—</span></button>
+      <div class="user-menu hidden" id="userMenu">
+        <button id="switchMemberBtn">Switch member</button>
+        <button id="leaveMessBtn">Leave this mess</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="tabs" id="tabNav">
+      <button class="tab-btn active" data-tab="dashboard"><span class="tab-icon-slot" data-icon="home"></span><span>Dashboard</span></button>
+      <button class="tab-btn" data-tab="meals"><span class="tab-icon-slot" data-icon="meals"></span><span>Meals</span></button>
+      <button class="tab-btn" data-tab="guests"><span class="tab-icon-slot" data-icon="guests"></span><span>Guests</span></button>
+      <button class="tab-btn" data-tab="fund"><span class="tab-icon-slot" data-icon="fund"></span><span>Fund</span></button>
+      <button class="tab-btn" data-tab="expenses"><span class="tab-icon-slot" data-icon="expenses"></span><span>Expenses</span></button>
+      <button class="tab-btn" data-tab="settlement"><span class="tab-icon-slot" data-icon="settlement"></span><span>Settlement</span></button>
+    </nav>
+
+    <main class="content">
+      <section id="tab-dashboard" class="tab-panel active"></section>
+      <section id="tab-meals" class="tab-panel"></section>
+      <section id="tab-guests" class="tab-panel"></section>
+      <section id="tab-fund" class="tab-panel"></section>
+      <section id="tab-expenses" class="tab-panel"></section>
+      <section id="tab-settlement" class="tab-panel"></section>
+    </main>
+  </div>
+</div>
+
+<!-- Settings modal -->
+<div id="settingsModal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Settings</div>
+      <button class="modal-close" id="closeSettingsBtn" data-icon="close"></button>
+    </div>
+    <div class="modal-tabs">
+      <button class="modal-tab-btn active" data-mtab="members">Members</button>
+      <button class="modal-tab-btn" data-mtab="categories">Categories</button>
+      <button class="modal-tab-btn" data-mtab="general">General</button>
+      <button class="modal-tab-btn" data-mtab="danger">Danger zone</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-pane active" id="mpane-members"></div>
+      <div class="modal-pane" id="mpane-categories"></div>
+      <div class="modal-pane" id="mpane-general"></div>
+      <div class="modal-pane" id="mpane-danger"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm modal -->
+<div id="confirmModal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:380px;">
+    <div class="modal-header">
+      <div class="modal-title" id="confirmTitle">Are you sure?</div>
+    </div>
+    <p id="confirmMessage" style="font-size:0.9rem; color:var(--ink-soft); line-height:1.5; margin:0 0 20px;"></p>
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-ghost" id="confirmCancelBtn" style="flex:1;">Cancel</button>
+      <button class="btn btn-danger" id="confirmOkBtn" style="flex:1;">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script type="module">
+/* =========================================================================
+   MESS LEDGER — Firebase-backed PWA, multi-mess
+   Fill in your own Firebase project's config below (see README.md).
+   ========================================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyBCqkmzuEkjOD5kXJxPq-5oyyekvEyrYpc",
+  authDomain: "mess--ledger.firebaseapp.com",
+  projectId: "mess--ledger",
+  storageBucket: "mess--ledger.firebasestorage.app",
+  messagingSenderId: "671907134793",
+  appId: "1:671907134793:web:8176cd0125025a20936e98",
+  measurementId: "G-HQBX8WJDKK"
+
+};
+/* ========================================================================= */
+
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js';
+import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js';
+import {
+  getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
+  collection, addDoc, onSnapshot, enableIndexedDbPersistence, serverTimestamp
+} from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
+
+/* ---------------- Icons ---------------- */
+const ICON = {
+  home: '<svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 11 4l8 6.5"/><path d="M5 9.5V18a1 1 0 0 0 1 1h3v-5h4v5h3a1 1 0 0 0 1-1V9.5"/></svg>',
+  meals: '<svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v6.5a1.5 1.5 0 0 0 3 0V2M7.5 8.5V20M16 2c-1.6 1.6-2.2 3.3-2.2 5.2 0 1.9 1 3.3 2.2 3.3s2.2-1.4 2.2-3.3C18.2 5.3 17.6 3.6 16 2Zm0 8.5V20"/></svg>',
+  guests: '<svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="7" r="3"/><path d="M2.5 19c0-3.3 2.5-6 5.5-6s5.5 2.7 5.5 6"/><path d="M17 5v6M14 8h6"/></svg>',
+  fund: '<svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M11 6.5v9M8.5 8.7c0-1.2 1.1-1.7 2.5-1.7s2.5.6 2.5 1.7-1 1.5-2.5 1.8-2.5.7-2.5 1.9 1.1 1.8 2.5 1.8 2.5-.5 2.5-1.7"/></svg>',
+  expenses: '<svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h12v18l-2.5-1.5L12 20l-2.5-1.5L7 20l-2-1.5Z"/><path d="M8 7h6M8 11h6M8 15h4"/></svg>',
+  settlement: '<svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8.5"/><path d="M7.5 11.2l2.3 2.3 4.7-5"/></svg>',
+  settings: '<svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="2.8"/><path d="M11 2.5v2.2M11 17.3v2.2M19.5 11h-2.2M4.7 11H2.5M16.8 5.2l-1.6 1.6M6.8 15.2l-1.6 1.6M16.8 16.8l-1.6-1.6M6.8 6.8 5.2 5.2"/></svg>',
+  chevron: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>',
+  trash: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h12M7 5V3.5A1 1 0 0 1 8 2.5h2a1 1 0 0 1 1 1V5M6 5v9a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V5"/></svg>',
+  edit: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 2.5 15.5 5.5 6 15H3v-3Z"/></svg>',
+  close: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l10 10M14 4 4 14"/></svg>'
+};
+
+/* ---------------- Local (device-only) state ---------------- */
+const SESSION_KEY = 'messledger_session_v2';
+const ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no O/0, I/1 — avoids look-alike mistakes
+let state = null;
+let messId = null;
+let session = null;
+let currentTab = 'dashboard';
+let editing = { guest:null, contrib:null, expense:null, member:null };
+let pendingLoginMemberId = null;
+let confirmCallback = null;
+let currentMealDate = toDateStr(new Date());
+let appEntered = false;
+let settlementMonth = toMonthStr(new Date());
+let unsubscribers = [];
+
+function defaultCategories(){
+  return ['Groceries','Vegetables','Fish/Meat','Gas Cylinder',"Cook's Salary",'Other'];
+}
+function emptyState(){
+  return { messName:'', categories:defaultCategories(), members:[], meals:{}, guestMeals:[], contributions:[], expenses:[] };
+}
+state = emptyState();
+
+function toDateStr(d){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+day;
+}
+function toMonthStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function formatINR(n){
+  const v = Number(n)||0;
+  const rounded = Math.round(v*100)/100;
+  return '₹' + rounded.toLocaleString('en-IN', {maximumFractionDigits:2});
+}
+function formatDateShort(dstr){
+  if(!dstr) return '';
+  const dt = new Date(dstr+'T00:00:00');
+  return dt.toLocaleDateString('en-IN', {day:'2-digit', month:'short'});
+}
+function escapeHtml(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function memberName(id){
+  if(id==='fund') return 'Mess Fund';
+  const m = state.members.find(mm=>mm.id===id);
+  return m ? m.name : 'Former member';
+}
+function memberInitial(name){ return (name||'?').trim().charAt(0).toUpperCase() || '?'; }
+
+function loadLocalSession(){
+  try{ const raw = localStorage.getItem(SESSION_KEY); return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
+}
+function saveLocalSession(mId, memberId){
+  try{ localStorage.setItem(SESSION_KEY, JSON.stringify({messId:mId, memberId})); }catch(e){}
+}
+function clearLocalSession(){
+  try{ localStorage.removeItem(SESSION_KEY); }catch(e){}
+}
+async function copyText(text){
+  try{
+    await navigator.clipboard.writeText(text);
+    showToast('Copied to clipboard');
+  }catch(e){
+    showToast('Could not copy — the ID is: '+text, true);
+  }
+}
+
+/* ---------------- Toast / Confirm ---------------- */
+let toastTimer = null;
+function showToast(msg, isError){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.toggle('error', !!isError);
+  el.classList.remove('hidden');
+  if(toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ el.classList.add('hidden'); }, 2400);
+}
+function openConfirm(title, message, onConfirm){
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmMessage').textContent = message;
+  confirmCallback = onConfirm;
+  document.getElementById('confirmModal').classList.remove('hidden');
+}
+function closeConfirm(){
+  document.getElementById('confirmModal').classList.add('hidden');
+  confirmCallback = null;
+}
+function setSyncDot(online){
+  ['syncDotTop','syncDotLogin','syncDotLanding'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.classList.toggle('offline', !online);
+  });
+  const txt = document.getElementById('syncTextLogin');
+  if(txt) txt.textContent = online ? 'Synced live across the mess' : 'Offline — changes will sync later';
+  const txt2 = document.getElementById('syncTextLanding');
+  if(txt2) txt2.textContent = online ? 'Connected' : 'Offline';
+}
+
+/* ---------------- Firebase setup ---------------- */
+let app, auth, db;
+let messRef, membersCol, mealsCol, guestMealsCol, contributionsCol, expensesCol;
+
+function isConfigFilledIn(){
+  return firebaseConfig.apiKey && firebaseConfig.apiKey.indexOf('YOUR_') !== 0;
+}
+async function bootFirebase(){
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+  try{ await enableIndexedDbPersistence(db); }catch(e){ /* multiple tabs or unsupported browser — safe to ignore */ }
+  await signInAnonymously(auth);
+}
+function bindMessRefs(id){
+  messRef = doc(db, 'messes', id);
+  membersCol = collection(db, 'messes', id, 'members');
+  mealsCol = collection(db, 'messes', id, 'meals');
+  guestMealsCol = collection(db, 'messes', id, 'guestMeals');
+  contributionsCol = collection(db, 'messes', id, 'contributions');
+  expensesCol = collection(db, 'messes', id, 'expenses');
+}
+function generateMessIdCandidate(){
+  let code = '';
+  for(let i=0;i<6;i++) code += ID_ALPHABET[Math.floor(Math.random()*ID_ALPHABET.length)];
+  return code;
+}
+async function generateUniqueMessId(){
+  for(let attempt=0; attempt<8; attempt++){
+    const code = generateMessIdCandidate();
+    const snap = await getDoc(doc(db,'messes',code));
+    if(!snap.exists()) return code;
+  }
+  throw new Error('Could not generate a unique mess ID — please try again.');
+}
+
+function detachListeners(){
+  unsubscribers.forEach(u=>{ try{ u(); }catch(e){} });
+  unsubscribers = [];
+}
+function attachLiveListeners(){
+  detachListeners();
+  unsubscribers.push(onSnapshot(messRef, (snap)=>{
+    if(snap.exists()){
+      const d = snap.data();
+      state.messName = d.messName || 'Unnamed mess';
+      state.categories = (d.categories && d.categories.length) ? d.categories : defaultCategories();
+      const nd = document.getElementById('messNameDisplay'); if(nd) nd.textContent = state.messName;
+      const ld = document.getElementById('loginMessName'); if(ld) ld.textContent = state.messName;
+    }
+    setSyncDot(true);
+    renderCurrentTab();
+  }, ()=>setSyncDot(false)));
+
+  unsubscribers.push(onSnapshot(membersCol, (snap)=>{
+    state.members = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    if(!document.getElementById('loginScreen').classList.contains('hidden')) renderLoginMembers();
+    renderCurrentTab();
+  }, ()=>setSyncDot(false)));
+
+  unsubscribers.push(onSnapshot(mealsCol, (snap)=>{
+    const meals = {};
+    snap.docs.forEach(d=>{ meals[d.id] = d.data(); });
+    state.meals = meals;
+    renderCurrentTab();
+  }, ()=>setSyncDot(false)));
+
+  unsubscribers.push(onSnapshot(guestMealsCol, (snap)=>{
+    state.guestMeals = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderCurrentTab();
+  }, ()=>setSyncDot(false)));
+
+  unsubscribers.push(onSnapshot(contributionsCol, (snap)=>{
+    state.contributions = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderCurrentTab();
+  }, ()=>setSyncDot(false)));
+
+  unsubscribers.push(onSnapshot(expensesCol, (snap)=>{
+    state.expenses = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderCurrentTab();
+  }, ()=>setSyncDot(false)));
+}
+
+/* ---------------- Firestore write helpers ---------------- */
+async function fbSaveConfig(data){ return setDoc(messRef, data, { merge:true }); }
+async function fbAddMember(name, pin){ return addDoc(membersCol, {name, pin: pin||''}); }
+async function fbUpdateMember(id, data){ return updateDoc(doc(membersCol, id), data); }
+async function fbDeleteMember(id){ return deleteDoc(doc(membersCol, id)); }
+async function fbToggleMeal(dateStr, memberId, slot, value){
+  const ref = doc(mealsCol, dateStr);
+  const fieldPath = memberId + '.' + slot + 'Absent';
+  // setDoc(merge) treats a dotted key as a literal field name, not a nested path —
+  // only updateDoc() parses dot notation into nested fields, so the doc must exist first.
+  await setDoc(ref, {}, { merge:true });
+  return updateDoc(ref, { [fieldPath]: value });
+}
+async function fbAddGuestMeal(entry){ return addDoc(guestMealsCol, entry); }
+async function fbUpdateGuestMeal(id, entry){ return updateDoc(doc(guestMealsCol, id), entry); }
+async function fbDeleteGuestMeal(id){ return deleteDoc(doc(guestMealsCol, id)); }
+async function fbAddContribution(entry){ return addDoc(contributionsCol, entry); }
+async function fbUpdateContribution(id, entry){ return updateDoc(doc(contributionsCol, id), entry); }
+async function fbDeleteContribution(id){ return deleteDoc(doc(contributionsCol, id)); }
+async function fbAddExpense(entry){ return addDoc(expensesCol, entry); }
+async function fbUpdateExpense(id, entry){ return updateDoc(doc(expensesCol, id), entry); }
+async function fbDeleteExpense(id){ return deleteDoc(doc(expensesCol, id)); }
+async function fbCreateMess(name, categories){
+  const id = await generateUniqueMessId();
+  await setDoc(doc(db,'messes',id), { messName:name, categories, createdAt: serverTimestamp() });
+  return id;
+}
+async function fbDeleteMessCompletely(){
+  const [membersSnap, mealsSnap, guestSnap, contribSnap, expenseSnap] = await Promise.all([
+    getDocs(membersCol), getDocs(mealsCol), getDocs(guestMealsCol), getDocs(contributionsCol), getDocs(expensesCol)
+  ]);
+  const deletions = [];
+  membersSnap.forEach(d=>deletions.push(deleteDoc(d.ref)));
+  mealsSnap.forEach(d=>deletions.push(deleteDoc(d.ref)));
+  guestSnap.forEach(d=>deletions.push(deleteDoc(d.ref)));
+  contribSnap.forEach(d=>deletions.push(deleteDoc(d.ref)));
+  expenseSnap.forEach(d=>deletions.push(deleteDoc(d.ref)));
+  await Promise.all(deletions);
+  await deleteDoc(messRef);
+}
+
+/* ---------------- Entering / leaving a mess ---------------- */
+async function enterMess(id){
+  messId = id;
+  bindMessRefs(id);
+  const snap = await getDoc(messRef);
+  if(!snap.exists()) throw new Error('Mess not found');
+  const d = snap.data();
+  state.messName = d.messName || 'Unnamed mess';
+  state.categories = (d.categories && d.categories.length) ? d.categories : defaultCategories();
+  const membersSnap = await getDocs(membersCol);
+  state.members = membersSnap.docs.map(x=>({id:x.id, ...x.data()}));
+  attachLiveListeners();
+}
+function resetToLanding(){
+  detachListeners();
+  clearLocalSession();
+  state = emptyState();
+  messId = null;
+  session = null;
+  appEntered = false;
+  showLandingScreen();
+}
+
+/* ---------------- Init / routing ---------------- */
+async function init(){
+  bindStaticEvents();
+
+  if(!isConfigFilledIn()){
+    document.getElementById('loadingOverlay').classList.add('hidden');
+    document.getElementById('needsSetupScreen').classList.remove('hidden');
+    return;
+  }
+
+  try{
+    await bootFirebase();
+    const sess = loadLocalSession();
+    if(sess && sess.messId && sess.memberId){
+      try{
+        await enterMess(sess.messId);
+        document.getElementById('loadingOverlay').classList.add('hidden');
+        if(state.members.find(m=>m.id===sess.memberId)){
+          session = sess;
+          enterApp(sess.memberId);
+        } else {
+          showLoginScreen();
+        }
+        return;
+      }catch(e){
+        clearLocalSession();
+      }
+    }
+    document.getElementById('loadingOverlay').classList.add('hidden');
+    showLandingScreen();
+  }catch(err){
+    document.getElementById('loadingOverlay').classList.add('hidden');
+    document.getElementById('connErrorMessage').textContent =
+      'Details: ' + (err && err.message ? err.message : 'Unknown error');
+    document.getElementById('connErrorScreen').classList.remove('hidden');
+  }
+}
+
+function hideAllScreens(){
+  ['landingScreen','setupScreen','messCreatedScreen','loginScreen','mainApp'].forEach(id=>{
+    document.getElementById(id).classList.add('hidden');
+  });
+}
+function showLandingScreen(){
+  hideAllScreens();
+  document.getElementById('landingScreen').classList.remove('hidden');
+  document.getElementById('joinMessIdInput').value = '';
+  document.getElementById('joinIdError').classList.add('hidden');
+}
+function showSetupScreen(){
+  hideAllScreens();
+  document.getElementById('setupScreen').classList.remove('hidden');
+  const list = document.getElementById('setupMembersList');
+  list.innerHTML = '';
+  addSetupRow(); addSetupRow(); addSetupRow();
+}
+function addSetupRow(){
+  const list = document.getElementById('setupMembersList');
+  const row = document.createElement('div');
+  row.className = 'setup-member-row';
+  row.innerHTML =
+    '<input type="text" class="setup-name" placeholder="Member name" maxlength="30">' +
+    '<input type="text" class="setup-pin" placeholder="PIN" inputmode="numeric" maxlength="4">' +
+    '<button type="button" class="row-remove-btn" title="Remove row">'+ICON.close+'</button>';
+  row.querySelector('.row-remove-btn').addEventListener('click', ()=>row.remove());
+  list.appendChild(row);
+}
+function showMessCreatedScreen(id){
+  hideAllScreens();
+  document.getElementById('messCreatedScreen').classList.remove('hidden');
+  document.getElementById('createdMessIdText').textContent = id;
+}
+function showLoginScreen(){
+  hideAllScreens();
+  document.getElementById('loginScreen').classList.remove('hidden');
+  document.getElementById('loginMessName').textContent = state.messName;
+  document.getElementById('loginMessIdChip').textContent = 'ID: ' + messId;
+  document.getElementById('pinEntryBlock').classList.add('hidden');
+  pendingLoginMemberId = null;
+  renderLoginMembers();
+}
+function renderLoginMembers(){
+  const grid = document.getElementById('loginMemberGrid');
+  if(!grid) return;
+  grid.innerHTML = state.members.map(m=>
+    '<button class="member-btn" data-mid="'+m.id+'">' +
+      '<span class="member-avatar">'+escapeHtml(memberInitial(m.name))+'</span>' +
+      '<span class="mb-label">'+escapeHtml(m.name)+'</span>' +
+    '</button>'
+  ).join('');
+  grid.querySelectorAll('.member-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>handleLoginTap(btn.dataset.mid));
+  });
+}
+function handleLoginTap(mid){
+  const m = state.members.find(x=>x.id===mid);
+  if(!m) return;
+  if(m.pin){
+    pendingLoginMemberId = mid;
+    document.getElementById('pinEntryLabel').textContent = 'Enter PIN for '+m.name;
+    document.getElementById('pinEntryInput').value = '';
+    document.getElementById('pinEntryBlock').classList.remove('hidden');
+    document.getElementById('pinEntryInput').focus();
+  } else {
+    loginAs(mid);
+  }
+}
+function loginAs(mid){
+  session = {messId, memberId:mid};
+  saveLocalSession(messId, mid);
+  enterApp(mid);
+}
+function enterApp(mid){
+  appEntered = true;
+  hideAllScreens();
+  document.getElementById('mainApp').classList.remove('hidden');
+  document.getElementById('currentUserName').textContent = memberName(mid);
+  document.getElementById('messNameDisplay').textContent = state.messName;
+  switchTab('dashboard');
+}
+function logoutMember(){
+  session = {messId, memberId:null};
+  clearLocalSession();
+  appEntered = false;
+  showLoginScreen();
+}
+function leaveMess(){
+  resetToLanding();
+}
+
+/* ---------------- Tabs ---------------- */
+function switchTab(tab){
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active', p.id==='tab-'+tab));
+  renderCurrentTab();
+}
+function renderCurrentTab(){
+  if(!appEntered) return;
+  if(currentTab==='dashboard') renderDashboard();
+  else if(currentTab==='meals') renderMeals();
+  else if(currentTab==='guests') renderGuests();
+  else if(currentTab==='fund') renderFund();
+  else if(currentTab==='expenses') renderExpenses();
+  else if(currentTab==='settlement') renderSettlement();
+}
+
+/* ---------------- Settlement calc ---------------- */
+function calcSettlement(monthKey){
+  const parts = monthKey.split('-').map(Number);
+  const y = parts[0], mo = parts[1];
+  const daysInMonth = new Date(y, mo, 0).getDate();
+  const today = new Date();
+  const isCurrentMonth = (today.getFullYear()===y && (today.getMonth()+1)===mo);
+  const isFutureMonth = new Date(y, mo-1, 1) > new Date(today.getFullYear(), today.getMonth(), 1);
+  let effectiveDays;
+  if(isFutureMonth) effectiveDays = 0;
+  else if(isCurrentMonth) effectiveDays = today.getDate();
+  else effectiveDays = daysInMonth;
+
+  const members = state.members;
+  const mealsByMember = {};
+  members.forEach(m=>{ mealsByMember[m.id] = effectiveDays*2; });
+
+  Object.keys(state.meals).forEach(dateStr=>{
+    if(dateStr.indexOf(monthKey)!==0) return;
+    const day = Number(dateStr.split('-')[2]);
+    if(day > effectiveDays) return;
+    const dayData = state.meals[dateStr];
+    Object.keys(dayData).forEach(memId=>{
+      if(!Object.prototype.hasOwnProperty.call(mealsByMember, memId)) return;
+      const rec = dayData[memId];
+      if(rec.lunchAbsent) mealsByMember[memId]--;
+      if(rec.dinnerAbsent) mealsByMember[memId]--;
+    });
+  });
+
+  const guestMealsByMember = {};
+  members.forEach(m=>{ guestMealsByMember[m.id] = 0; });
+  state.guestMeals.forEach(g=>{
+    if(g.date.indexOf(monthKey)!==0) return;
+    const day = Number(g.date.split('-')[2]);
+    if(day > effectiveDays) return;
+    if(Object.prototype.hasOwnProperty.call(guestMealsByMember, g.hostId)){
+      guestMealsByMember[g.hostId] += Number(g.count)||0;
+    }
+  });
+
+  const effectiveMeals = {};
+  let totalMeals = 0;
+  members.forEach(m=>{
+    effectiveMeals[m.id] = (mealsByMember[m.id]||0) + (guestMealsByMember[m.id]||0);
+    totalMeals += effectiveMeals[m.id];
+  });
+
+  const monthExpenses = state.expenses.filter(e=>{
+    if(e.date.indexOf(monthKey)!==0) return false;
+    return Number(e.date.split('-')[2]) <= effectiveDays;
+  });
+  const poolMeals = monthExpenses.filter(e=>e.splitType==='meals').reduce((s,e)=>s+Number(e.amount||0),0);
+  const poolEqual = monthExpenses.filter(e=>e.splitType==='equal').reduce((s,e)=>s+Number(e.amount||0),0);
+  const mealRate = totalMeals>0 ? poolMeals/totalMeals : 0;
+  const equalShare = members.length>0 ? poolEqual/members.length : 0;
+
+  const monthContribs = state.contributions.filter(c=>{
+    if(c.date.indexOf(monthKey)!==0) return false;
+    return Number(c.date.split('-')[2]) <= effectiveDays;
+  });
+
+  const rows = members.map(m=>{
+    const share = mealRate*effectiveMeals[m.id] + equalShare;
+    const contribPaid = monthContribs.filter(c=>c.memberId===m.id).reduce((s,c)=>s+Number(c.amount||0),0);
+    const directPaid = monthExpenses.filter(e=>e.paidBy===m.id).reduce((s,e)=>s+Number(e.amount||0),0);
+    const paid = contribPaid + directPaid;
+    const balance = paid - share;
+    return {
+      member:m, ownMeals:mealsByMember[m.id], guestMeals:guestMealsByMember[m.id],
+      effectiveMeals:effectiveMeals[m.id], share, contribPaid, directPaid, paid, balance
+    };
+  });
+
+  return { monthKey, effectiveDays, daysInMonth, totalMeals, mealRate, poolMeals, poolEqual,
+    totalExpense: poolMeals+poolEqual, contribTotal: monthContribs.reduce((s,c)=>s+Number(c.amount||0),0), rows };
+}
+function fundBalance(){
+  const totalIn = state.contributions.reduce((s,c)=>s+Number(c.amount||0),0);
+  const totalOut = state.expenses.filter(e=>e.paidBy==='fund').reduce((s,e)=>s+Number(e.amount||0),0);
+  return totalIn - totalOut;
+}
+
+/* ---------------- Render: Dashboard ---------------- */
+function renderDashboard(){
+  const el = document.getElementById('tab-dashboard');
+  const monthKey = toMonthStr(new Date());
+  const s = calcSettlement(monthKey);
+  const balance = fundBalance();
+  const todayStr = toDateStr(new Date());
+  const dayData = state.meals[todayStr] || {};
+  let lunchPresent=0, dinnerPresent=0;
+  state.members.forEach(m=>{
+    const rec = dayData[m.id] || {};
+    if(!rec.lunchAbsent) lunchPresent++;
+    if(!rec.dinnerAbsent) dinnerPresent++;
+  });
+  const guestsToday = state.guestMeals.filter(g=>g.date===todayStr).reduce((sum,g)=>sum+(Number(g.count)||0),0);
+  const recent = state.expenses.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+
+  el.innerHTML =
+    '<div class="panel-header">' +
+      '<div><div class="panel-title">Dashboard</div><div class="panel-sub">'+escapeHtml(state.messName)+' · '+state.members.length+' member'+(state.members.length===1?'':'s')+' · <span class="mess-id-inline">ID: '+messId+'</span></div></div>' +
+    '</div>' +
+    '<div class="cards-row">' +
+      '<div class="stat-card '+(balance>=0?'balance-pos':'balance-neg')+'"><div class="stat-label">Fund balance</div><div class="stat-value">'+formatINR(balance)+'</div><div class="stat-sub">All-time contributions minus fund spend</div></div>' +
+      '<div class="stat-card"><div class="stat-label">This month\'s expenses</div><div class="stat-value">'+formatINR(s.totalExpense)+'</div><div class="stat-sub">Through '+formatDateShort(toDateStr(new Date()))+'</div></div>' +
+      '<div class="stat-card"><div class="stat-label">Meal rate so far</div><div class="stat-value">'+formatINR(s.mealRate)+'</div><div class="stat-sub">per meal, this month</div></div>' +
+      '<div class="stat-card"><div class="stat-label">Today\'s meals</div><div class="stat-value">'+lunchPresent+' / '+dinnerPresent+'</div><div class="stat-sub">Lunch / Dinner present'+(guestsToday>0? ' · '+guestsToday+' guest meal'+(guestsToday===1?'':'s'):'')+'</div></div>' +
+    '</div>' +
+    '<div class="section-card">' +
+      '<h3>Recent expenses</h3>' +
+      (recent.length===0 ? '<div class="empty-state">No expenses logged yet. Add one from the Expenses tab.</div>' :
+        '<div class="list-wrap">' + recent.map(e=>
+          '<div class="list-row" style="grid-template-columns:70px minmax(0,1fr) auto;">' +
+            '<div class="list-date">'+formatDateShort(e.date)+'</div>' +
+            '<div class="list-main"><div class="list-title">'+escapeHtml(e.category)+'</div><div class="list-meta">Paid by '+escapeHtml(memberName(e.paidBy))+'</div></div>' +
+            '<div class="list-amount debit">'+formatINR(e.amount)+'</div>' +
+          '</div>'
+        ).join('') + '</div>'
+      ) +
+    '</div>';
+}
+
+/* ---------------- Render: Meals ---------------- */
+function renderMeals(){
+  const el = document.getElementById('tab-meals');
+  el.innerHTML =
+    '<div class="panel-header"><div><div class="panel-title">Meals</div><div class="panel-sub">Everyone is counted present by default — mark only who\'s absent.</div></div></div>' +
+    '<div class="section-card">' +
+      '<div class="field"><label for="mealDateInput">Date</label><input type="date" id="mealDateInput" value="'+currentMealDate+'" max="'+toDateStr(new Date())+'"></div>' +
+      '<div class="list-wrap" id="mealRowsWrap"></div>' +
+    '</div>';
+  document.getElementById('mealDateInput').addEventListener('change', (e)=>{
+    currentMealDate = e.target.value || toDateStr(new Date());
+    renderMealRows();
+  });
+  renderMealRows();
+}
+function renderMealRows(){
+  const wrap = document.getElementById('mealRowsWrap');
+  if(!wrap) return;
+  if(state.members.length===0){ wrap.innerHTML = '<div class="empty-state">Add members from Settings first.</div>'; return; }
+  const dayData = state.meals[currentMealDate] || {};
+  wrap.innerHTML = state.members.map(m=>{
+    const rec = dayData[m.id] || {};
+    const lunchAbsent = !!rec.lunchAbsent, dinnerAbsent = !!rec.dinnerAbsent;
+    return '<div class="meal-member-row">' +
+      '<div class="meal-member-name"><span class="member-avatar" style="width:28px;height:28px;font-size:0.75rem;margin:0;">'+escapeHtml(memberInitial(m.name))+'</span><span class="member-name-text">'+escapeHtml(m.name)+'</span></div>' +
+      '<div><span class="meal-pill-label">Lunch</span><button class="meal-pill '+(lunchAbsent?'absent':'present')+'" data-action="toggleMeal" data-mid="'+m.id+'" data-slot="lunch">'+(lunchAbsent?'Absent':'Present')+'</button></div>' +
+      '<div><span class="meal-pill-label">Dinner</span><button class="meal-pill '+(dinnerAbsent?'absent':'present')+'" data-action="toggleMeal" data-mid="'+m.id+'" data-slot="dinner">'+(dinnerAbsent?'Absent':'Present')+'</button></div>' +
+    '</div>';
+  }).join('');
+}
+async function toggleMeal(mid, slot){
+  const dayData = state.meals[currentMealDate] || {};
+  const rec = dayData[mid] || {lunchAbsent:false, dinnerAbsent:false};
+  const newVal = !rec[slot+'Absent'];
+  try{
+    await fbToggleMeal(currentMealDate, mid, slot, newVal);
+    showToast('Meal record updated');
+  }catch(e){
+    showToast('Could not save. Check your connection.', true);
+  }
+}
+
+/* ---------------- Render: Guests ---------------- */
+function renderGuests(){
+  const el = document.getElementById('tab-guests');
+  const editingEntry = editing.guest ? state.guestMeals.find(g=>g.id===editing.guest) : null;
+  el.innerHTML =
+    '<div class="panel-header"><div><div class="panel-title">Guest meals</div><div class="panel-sub">A guest\'s meals count toward their host\'s share.</div></div></div>' +
+    '<div class="section-card">' +
+      '<h3>'+(editingEntry?'Edit guest meal':'Log a guest meal')+'</h3>' +
+      '<form id="guestForm">' +
+        '<div class="form-grid">' +
+          '<div class="field"><label for="guestDate">Date</label><input type="date" id="guestDate" required max="'+toDateStr(new Date())+'" value="'+(editingEntry?editingEntry.date:toDateStr(new Date()))+'"></div>' +
+          '<div class="field"><label for="guestMeal">Meal</label><select id="guestMeal">' +
+            '<option value="lunch" '+(editingEntry&&editingEntry.meal==='lunch'?'selected':'')+'>Lunch</option>' +
+            '<option value="dinner" '+(editingEntry&&editingEntry.meal==='dinner'?'selected':'')+'>Dinner</option>' +
+          '</select></div>' +
+          '<div class="field"><label for="guestHost">Hosted by</label><select id="guestHost">' + memberOptions(editingEntry?editingEntry.hostId:null) + '</select></div>' +
+          '<div class="field"><label for="guestCount">Number of guests</label><input type="number" id="guestCount" min="1" step="1" required value="'+(editingEntry?editingEntry.count:1)+'"></div>' +
+          '<div class="field full"><label for="guestNote">Note (optional)</label><input type="text" id="guestNote" maxlength="60" value="'+(editingEntry?escapeHtml(editingEntry.note||''):'')+'"></div>' +
+        '</div>' +
+        '<div class="form-actions">' +
+          '<button type="submit" class="btn btn-primary">'+(editingEntry?'Update entry':'Add guest meal')+'</button>' +
+          (editingEntry?'<button type="button" class="btn btn-ghost" id="guestCancelEdit">Cancel</button>':'') +
+        '</div>' +
+      '</form>' +
+    '</div>' +
+    '<div class="section-card">' +
+      '<h3>Guest meal log</h3>' +
+      '<div class="list-wrap" id="guestListWrap"></div>' +
+    '</div>';
+
+  document.getElementById('guestForm').addEventListener('submit', onGuestSubmit);
+  const cancelBtn = document.getElementById('guestCancelEdit');
+  if(cancelBtn) cancelBtn.addEventListener('click', ()=>{ editing.guest=null; renderGuests(); });
+  renderGuestList();
+}
+function memberOptions(selectedId){
+  if(state.members.length===0) return '<option value="">No members yet</option>';
+  return state.members.map(m=>'<option value="'+m.id+'" '+(selectedId===m.id?'selected':'')+'>'+escapeHtml(m.name)+'</option>').join('');
+}
+function renderGuestList(){
+  const wrap = document.getElementById('guestListWrap');
+  const entries = state.guestMeals.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  if(entries.length===0){ wrap.innerHTML = '<div class="empty-state">No guest meals logged yet.</div>'; return; }
+  wrap.innerHTML = entries.map(g=>
+    '<div class="list-row">' +
+      '<div class="list-date">'+formatDateShort(g.date)+'</div>' +
+      '<div class="list-main"><div class="list-title">'+g.count+' guest'+(g.count==1?'':'s')+' at '+escapeHtml(g.meal)+'</div><div class="list-meta">Hosted by '+escapeHtml(memberName(g.hostId))+(g.note?' · '+escapeHtml(g.note):'')+'</div></div>' +
+      '<div></div>' +
+      '<div class="row-actions">' +
+        '<button data-action="editGuest" data-id="'+g.id+'" title="Edit">'+ICON.edit+'</button>' +
+        '<button data-action="deleteGuest" data-id="'+g.id+'" title="Delete">'+ICON.trash+'</button>' +
+      '</div>' +
+    '</div>'
+  ).join('');
+}
+async function onGuestSubmit(e){
+  e.preventDefault();
+  if(state.members.length===0){ showToast('Add members first from Settings.', true); return; }
+  const entry = {
+    date: document.getElementById('guestDate').value,
+    meal: document.getElementById('guestMeal').value,
+    hostId: document.getElementById('guestHost').value,
+    count: Math.max(1, Number(document.getElementById('guestCount').value)||1),
+    note: document.getElementById('guestNote').value.trim()
+  };
+  if(!entry.date || !entry.hostId){ showToast('Please fill in date and host.', true); return; }
+  const submitBtn = e.target.querySelector('button[type=submit]');
+  submitBtn.disabled = true;
+  try{
+    if(editing.guest){ await fbUpdateGuestMeal(editing.guest, entry); editing.guest = null; }
+    else{ await fbAddGuestMeal(entry); }
+    showToast('Guest meal saved');
+    renderGuests();
+  }catch(err){
+    showToast('Could not save. Check your connection.', true);
+    submitBtn.disabled = false;
+  }
+}
+
+/* ---------------- Render: Fund ---------------- */
+function renderFund(){
+  const el = document.getElementById('tab-fund');
+  const editingEntry = editing.contrib ? state.contributions.find(c=>c.id===editing.contrib) : null;
+  const totalIn = state.contributions.reduce((s,c)=>s+Number(c.amount||0),0);
+  el.innerHTML =
+    '<div class="panel-header"><div><div class="panel-title">Fund</div><div class="panel-sub">Total contributed so far: '+formatINR(totalIn)+' · Current balance: '+formatINR(fundBalance())+'</div></div></div>' +
+    '<div class="section-card">' +
+      '<h3>'+(editingEntry?'Edit contribution':'Add a fund contribution')+'</h3>' +
+      '<form id="contribForm">' +
+        '<div class="form-grid">' +
+          '<div class="field"><label for="contribDate">Date</label><input type="date" id="contribDate" required max="'+toDateStr(new Date())+'" value="'+(editingEntry?editingEntry.date:toDateStr(new Date()))+'"></div>' +
+          '<div class="field"><label for="contribMember">Member</label><select id="contribMember">'+memberOptions(editingEntry?editingEntry.memberId:null)+'</select></div>' +
+          '<div class="field"><label for="contribAmount">Amount (₹)</label><input type="number" id="contribAmount" min="0" step="0.01" required value="'+(editingEntry?editingEntry.amount:'')+'"></div>' +
+          '<div class="field"><label for="contribNote">Note (optional)</label><input type="text" id="contribNote" maxlength="60" value="'+(editingEntry?escapeHtml(editingEntry.note||''):'')+'"></div>' +
+        '</div>' +
+        '<div class="form-actions">' +
+          '<button type="submit" class="btn btn-primary">'+(editingEntry?'Update entry':'Add contribution')+'</button>' +
+          (editingEntry?'<button type="button" class="btn btn-ghost" id="contribCancelEdit">Cancel</button>':'') +
+        '</div>' +
+      '</form>' +
+    '</div>' +
+    '<div class="section-card">' +
+      '<h3>Contribution log</h3>' +
+      '<div class="list-wrap" id="contribListWrap"></div>' +
+    '</div>';
+  document.getElementById('contribForm').addEventListener('submit', onContribSubmit);
+  const cancelBtn = document.getElementById('contribCancelEdit');
+  if(cancelBtn) cancelBtn.addEventListener('click', ()=>{ editing.contrib=null; renderFund(); });
+  renderContribList();
+}
+function renderContribList(){
+  const wrap = document.getElementById('contribListWrap');
+  const entries = state.contributions.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  if(entries.length===0){ wrap.innerHTML = '<div class="empty-state">No contributions logged yet.</div>'; return; }
+  wrap.innerHTML = entries.map(c=>
+    '<div class="list-row">' +
+      '<div class="list-date">'+formatDateShort(c.date)+'</div>' +
+      '<div class="list-main"><div class="list-title">'+escapeHtml(memberName(c.memberId))+'</div><div class="list-meta">'+(c.note?escapeHtml(c.note):'Fund contribution')+'</div></div>' +
+      '<div class="list-amount credit">+'+formatINR(c.amount)+'</div>' +
+      '<div class="row-actions">' +
+        '<button data-action="editContrib" data-id="'+c.id+'" title="Edit">'+ICON.edit+'</button>' +
+        '<button data-action="deleteContrib" data-id="'+c.id+'" title="Delete">'+ICON.trash+'</button>' +
+      '</div>' +
+    '</div>'
+  ).join('');
+}
+async function onContribSubmit(e){
+  e.preventDefault();
+  if(state.members.length===0){ showToast('Add members first from Settings.', true); return; }
+  const entry = {
+    date: document.getElementById('contribDate').value,
+    memberId: document.getElementById('contribMember').value,
+    amount: Number(document.getElementById('contribAmount').value)||0,
+    note: document.getElementById('contribNote').value.trim()
+  };
+  if(!entry.date || !entry.memberId || entry.amount<=0){ showToast('Please fill in date, member and a valid amount.', true); return; }
+  const submitBtn = e.target.querySelector('button[type=submit]');
+  submitBtn.disabled = true;
+  try{
+    if(editing.contrib){ await fbUpdateContribution(editing.contrib, entry); editing.contrib = null; }
+    else{ await fbAddContribution(entry); }
+    showToast('Contribution saved');
+    renderFund();
+  }catch(err){
+    showToast('Could not save. Check your connection.', true);
+    submitBtn.disabled = false;
+  }
+}
+
+/* ---------------- Render: Expenses ---------------- */
+function renderExpenses(){
+  const el = document.getElementById('tab-expenses');
+  const editingEntry = editing.expense ? state.expenses.find(x=>x.id===editing.expense) : null;
+  const monthKey = toMonthStr(new Date());
+  const catTotals = {};
+  state.expenses.filter(e=>e.date.indexOf(monthKey)===0).forEach(e=>{
+    catTotals[e.category] = (catTotals[e.category]||0) + Number(e.amount||0);
+  });
+  const catRows = Object.keys(catTotals).sort((a,b)=>catTotals[b]-catTotals[a]);
+
+  el.innerHTML =
+    '<div class="panel-header"><div><div class="panel-title">Expenses</div><div class="panel-sub">Log every purchase, whether it came from the fund or someone\'s own pocket.</div></div></div>' +
+    '<div class="section-card">' +
+      '<h3>'+(editingEntry?'Edit expense':'Add an expense')+'</h3>' +
+      '<form id="expenseForm">' +
+        '<div class="form-grid">' +
+          '<div class="field"><label for="expDate">Date</label><input type="date" id="expDate" required max="'+toDateStr(new Date())+'" value="'+(editingEntry?editingEntry.date:toDateStr(new Date()))+'"></div>' +
+          '<div class="field"><label for="expCategory">Category</label><select id="expCategory">'+categoryOptions(editingEntry?editingEntry.category:null)+'</select></div>' +
+          '<div class="field"><label for="expAmount">Amount (₹)</label><input type="number" id="expAmount" min="0" step="0.01" required value="'+(editingEntry?editingEntry.amount:'')+'"></div>' +
+          '<div class="field"><label for="expPaidBy">Paid by</label><select id="expPaidBy">' +
+            '<option value="fund" '+(editingEntry&&editingEntry.paidBy==='fund'?'selected':'')+'>Mess Fund</option>' +
+            state.members.map(m=>'<option value="'+m.id+'" '+(editingEntry&&editingEntry.paidBy===m.id?'selected':'')+'>'+escapeHtml(m.name)+' (own pocket)</option>').join('') +
+          '</select></div>' +
+          '<div class="field"><label for="expSplit">Split</label><select id="expSplit">' +
+            '<option value="meals" '+(editingEntry&&editingEntry.splitType==='meals'?'selected':'')+'>By meals eaten</option>' +
+            '<option value="equal" '+(editingEntry&&editingEntry.splitType==='equal'?'selected':'')+'>Equally among all members</option>' +
+          '</select></div>' +
+          '<div class="field"><label for="expNote">Note (optional)</label><input type="text" id="expNote" maxlength="60" value="'+(editingEntry?escapeHtml(editingEntry.note||''):'')+'"></div>' +
+        '</div>' +
+        '<div class="form-actions">' +
+          '<button type="submit" class="btn btn-primary">'+(editingEntry?'Update entry':'Add expense')+'</button>' +
+          (editingEntry?'<button type="button" class="btn btn-ghost" id="expCancelEdit">Cancel</button>':'') +
+        '</div>' +
+      '</form>' +
+    '</div>' +
+    '<div class="section-card">' +
+      '<h3>This month by category</h3>' +
+      (catRows.length===0 ? '<div class="empty-state">No expenses this month yet.</div>' :
+        '<table class="totals-table"><thead><tr><th>Category</th><th class="num">Amount</th></tr></thead><tbody>' +
+        catRows.map(c=>'<tr><td>'+escapeHtml(c)+'</td><td class="num">'+formatINR(catTotals[c])+'</td></tr>').join('') +
+        '</tbody></table>') +
+    '</div>' +
+    '<div class="section-card">' +
+      '<h3>Expense log</h3>' +
+      '<div class="list-wrap" id="expenseListWrap"></div>' +
+    '</div>';
+
+  document.getElementById('expenseForm').addEventListener('submit', onExpenseSubmit);
+  const cancelBtn = document.getElementById('expCancelEdit');
+  if(cancelBtn) cancelBtn.addEventListener('click', ()=>{ editing.expense=null; renderExpenses(); });
+  renderExpenseList();
+}
+function categoryOptions(selected){
+  return state.categories.map(c=>'<option value="'+escapeHtml(c)+'" '+(selected===c?'selected':'')+'>'+escapeHtml(c)+'</option>').join('');
+}
+function renderExpenseList(){
+  const wrap = document.getElementById('expenseListWrap');
+  const entries = state.expenses.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  if(entries.length===0){ wrap.innerHTML = '<div class="empty-state">No expenses logged yet.</div>'; return; }
+  wrap.innerHTML = entries.map(e=>
+    '<div class="list-row">' +
+      '<div class="list-date">'+formatDateShort(e.date)+'</div>' +
+      '<div class="list-main"><div class="list-title">'+escapeHtml(e.category)+'</div><div class="list-meta">Paid by '+escapeHtml(memberName(e.paidBy))+' · '+(e.splitType==='equal'?'Equal split':'By meals')+(e.note?' · '+escapeHtml(e.note):'')+'</div></div>' +
+      '<div class="list-amount debit">'+formatINR(e.amount)+'</div>' +
+      '<div class="row-actions">' +
+        '<button data-action="editExpense" data-id="'+e.id+'" title="Edit">'+ICON.edit+'</button>' +
+        '<button data-action="deleteExpense" data-id="'+e.id+'" title="Delete">'+ICON.trash+'</button>' +
+      '</div>' +
+    '</div>'
+  ).join('');
+}
+async function onExpenseSubmit(e){
+  e.preventDefault();
+  const entry = {
+    date: document.getElementById('expDate').value,
+    category: document.getElementById('expCategory').value,
+    amount: Number(document.getElementById('expAmount').value)||0,
+    paidBy: document.getElementById('expPaidBy').value,
+    splitType: document.getElementById('expSplit').value,
+    note: document.getElementById('expNote').value.trim()
+  };
+  if(!entry.date || !entry.category || entry.amount<=0){ showToast('Please fill in date, category and a valid amount.', true); return; }
+  const submitBtn = e.target.querySelector('button[type=submit]');
+  submitBtn.disabled = true;
+  try{
+    if(editing.expense){ await fbUpdateExpense(editing.expense, entry); editing.expense = null; }
+    else{ await fbAddExpense(entry); }
+    showToast('Expense saved');
+    renderExpenses();
+  }catch(err){
+    showToast('Could not save. Check your connection.', true);
+    submitBtn.disabled = false;
+  }
+}
+
+/* ---------------- Render: Settlement ---------------- */
+function renderSettlement(){
+  const el = document.getElementById('tab-settlement');
+  const s = calcSettlement(settlementMonth);
+  el.innerHTML =
+    '<div class="panel-header"><div><div class="panel-title">Settlement</div><div class="panel-sub">Who owes what, and who gets money back.</div></div></div>' +
+    '<div class="section-card">' +
+      '<div class="field" style="margin-bottom:0;"><label for="settlementMonth">Month</label><input type="month" id="settlementMonth" value="'+settlementMonth+'" max="'+toMonthStr(new Date())+'"></div>' +
+    '</div>' +
+    (state.members.length===0 ? '<div class="empty-state">Add members from Settings to see a settlement.</div>' :
+    '<div class="settlement-summary">' +
+      '<div><div class="s-label">Total meals</div><div class="s-value">'+s.totalMeals+'</div></div>' +
+      '<div><div class="s-label">Meal rate</div><div class="s-value">'+formatINR(s.mealRate)+'</div></div>' +
+      '<div><div class="s-label">Total expenses</div><div class="s-value">'+formatINR(s.totalExpense)+'</div></div>' +
+    '</div>' +
+    '<div class="chit-grid">' + s.rows.map(r=>renderChit(r, s)).join('') + '</div>'
+    );
+
+  document.getElementById('settlementMonth').addEventListener('change', (e)=>{
+    settlementMonth = e.target.value || toMonthStr(new Date());
+    renderSettlement();
+  });
+}
+function renderChit(r, s){
+  const bal = Math.round(r.balance*100)/100;
+  let stampClass = 'settled', stampLabel = 'Settled', stampAmt = formatINR(0);
+  if(bal > 0.5){ stampClass='receive'; stampLabel='To receive'; stampAmt=formatINR(bal); }
+  else if(bal < -0.5){ stampClass='pay'; stampLabel='To pay'; stampAmt=formatINR(Math.abs(bal)); }
+  const monthLabel = new Date(s.monthKey+'-01T00:00:00').toLocaleDateString('en-IN', {month:'long', year:'numeric'});
+  return '<div class="chit">' +
+    '<div class="chit-head"><div><div class="chit-name">'+escapeHtml(r.member.name)+'</div><div class="chit-month">'+monthLabel+'</div></div></div>' +
+    '<div class="chit-row"><span>Meals eaten (own)</span><span>'+r.ownMeals+'</span></div>' +
+    '<div class="chit-row"><span>Guest meals hosted</span><span>'+r.guestMeals+'</span></div>' +
+    '<div class="chit-row"><span>Share of expenses</span><span>'+formatINR(r.share)+'</span></div>' +
+    '<div class="chit-row"><span>Fund contributions</span><span>'+formatINR(r.contribPaid)+'</span></div>' +
+    '<div class="chit-row"><span>Paid directly</span><span>'+formatINR(r.directPaid)+'</span></div>' +
+    '<div class="chit-row total"><span>Total paid in</span><span>'+formatINR(r.paid)+'</span></div>' +
+    '<div class="chit-stamp-wrap"><div class="stamp '+stampClass+'"><span class="stamp-label">'+stampLabel+'</span><span class="stamp-amt">'+stampAmt+'</span></div></div>' +
+  '</div>';
+}
+
+/* ---------------- Settings modal ---------------- */
+function openSettings(){
+  document.getElementById('settingsModal').classList.remove('hidden');
+  switchSettingsTab('members');
+}
+function closeSettings(){
+  document.getElementById('settingsModal').classList.add('hidden');
+  editing.member = null;
+}
+function switchSettingsTab(tab){
+  document.querySelectorAll('.modal-tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.mtab===tab));
+  document.querySelectorAll('.modal-pane').forEach(p=>p.classList.toggle('active', p.id==='mpane-'+tab));
+  if(tab==='members') renderMembersPane();
+  else if(tab==='categories') renderCategoriesPane();
+  else if(tab==='general') renderGeneralPane();
+  else if(tab==='danger') renderDangerPane();
+}
+function renderMembersPane(){
+  const el = document.getElementById('mpane-members');
+  const editingId = editing.member;
+  const editingM = editingId ? state.members.find(m=>m.id===editingId) : null;
+  el.innerHTML =
+    '<p class="hint">PINs are stored in plain text in your Firestore project and visible to everyone with this mess\'s ID — they\'re just a light way to pick the right name, not real security.</p>' +
+    '<div id="membersListWrap">' + state.members.map(m=>{
+      if(editingM && editingM.id===m.id){
+        return '<div class="manage-row"><div style="flex:1; display:flex; gap:8px; min-width:0;">' +
+          '<input type="text" id="editMemberName" value="'+escapeHtml(m.name)+'" maxlength="30" style="flex:1; padding:8px 10px; border:1.5px solid var(--paper-line); border-radius:7px; min-width:0;">' +
+          '<input type="text" id="editMemberPin" value="'+escapeHtml(m.pin||'')+'" placeholder="PIN" inputmode="numeric" maxlength="4" style="width:70px; padding:8px 10px; border:1.5px solid var(--paper-line); border-radius:7px;">' +
+          '</div><div class="manage-actions">' +
+          '<button data-action="saveMemberEdit" data-id="'+m.id+'" class="btn-text" style="padding:6px 8px;">Save</button>' +
+          '<button data-action="cancelMemberEdit" class="btn-text" style="padding:6px 8px; color:var(--ink-soft);">Cancel</button>' +
+          '</div></div>';
+      }
+      return '<div class="manage-row">' +
+        '<div style="min-width:0;"><div class="manage-name">'+escapeHtml(m.name)+'</div><div class="manage-meta">'+(m.pin?'PIN set':'No PIN')+'</div></div>' +
+        '<div class="manage-actions">' +
+          '<button data-action="editMember" data-id="'+m.id+'" title="Edit">'+ICON.edit+'</button>' +
+          '<button data-action="deleteMember" data-id="'+m.id+'" title="Remove">'+ICON.trash+'</button>' +
+        '</div>' +
+      '</div>';
+    }).join('') + '</div>' +
+    '<div class="chip-input-row">' +
+      '<input type="text" id="newMemberName" placeholder="New member name" maxlength="30">' +
+      '<input type="text" id="newMemberPin" placeholder="PIN (opt.)" inputmode="numeric" maxlength="4" style="width:80px;">' +
+      '<button class="btn btn-primary btn-sm" id="addMemberBtn">Add</button>' +
+    '</div>';
+  document.getElementById('addMemberBtn').addEventListener('click', addMember);
+}
+async function addMember(){
+  const nameEl = document.getElementById('newMemberName');
+  const pinEl = document.getElementById('newMemberPin');
+  const name = nameEl.value.trim();
+  const pin = pinEl.value.trim();
+  if(!name){ showToast('Enter a name first.', true); return; }
+  if(pin && !/^\d{4}$/.test(pin)){ showToast('PIN must be exactly 4 digits.', true); return; }
+  try{
+    await fbAddMember(name, pin);
+    showToast('Member added');
+    renderMembersPane();
+  }catch(e){ showToast('Could not save. Check your connection.', true); }
+}
+async function saveMemberEdit(id){
+  const nameEl = document.getElementById('editMemberName');
+  const pinEl = document.getElementById('editMemberPin');
+  const name = nameEl.value.trim();
+  const pin = pinEl.value.trim();
+  if(!name){ showToast('Name cannot be empty.', true); return; }
+  if(pin && !/^\d{4}$/.test(pin)){ showToast('PIN must be exactly 4 digits.', true); return; }
+  try{
+    await fbUpdateMember(id, {name, pin});
+    editing.member = null;
+    showToast('Member updated');
+    renderMembersPane();
+    document.getElementById('currentUserName').textContent = memberName(session ? session.memberId : null);
+  }catch(e){ showToast('Could not save. Check your connection.', true); }
+}
+function renderCategoriesPane(){
+  const el = document.getElementById('mpane-categories');
+  el.innerHTML =
+    '<p class="hint">Categories used when logging expenses (Groceries, Gas Cylinder, Cook\'s Salary, and so on).</p>' +
+    '<div>' + state.categories.map(c=>
+      '<div class="manage-row"><div class="manage-name">'+escapeHtml(c)+'</div>' +
+      '<div class="manage-actions"><button data-action="deleteCategory" data-cat="'+escapeHtml(c)+'" title="Remove">'+ICON.trash+'</button></div></div>'
+    ).join('') + '</div>' +
+    '<div class="chip-input-row">' +
+      '<input type="text" id="newCategoryName" placeholder="New category" maxlength="30">' +
+      '<button class="btn btn-primary btn-sm" id="addCategoryBtn">Add</button>' +
+    '</div>';
+  document.getElementById('addCategoryBtn').addEventListener('click', addCategory);
+}
+async function addCategory(){
+  const inp = document.getElementById('newCategoryName');
+  const name = inp.value.trim();
+  if(!name){ showToast('Enter a category name.', true); return; }
+  if(state.categories.includes(name)){ showToast('That category already exists.', true); return; }
+  try{
+    await fbSaveConfig({ categories: state.categories.concat([name]) });
+    showToast('Category added');
+    renderCategoriesPane();
+  }catch(e){ showToast('Could not save. Check your connection.', true); }
+}
+function renderGeneralPane(){
+  const el = document.getElementById('mpane-general');
+  el.innerHTML =
+    '<div class="field"><label>Mess ID</label><div style="display:flex; gap:8px;">' +
+      '<input type="text" readonly value="'+messId+'" style="font-family:var(--font-mono); letter-spacing:0.12em; font-weight:600;">' +
+      '<button class="btn btn-ghost btn-sm" id="copyIdSettingsBtn" style="flex-shrink:0;">Copy</button>' +
+    '</div></div>' +
+    '<div class="field"><label for="messNameInput">Mess name</label><input type="text" id="messNameInput" value="'+escapeHtml(state.messName)+'" maxlength="40"></div>' +
+    '<button class="btn btn-primary btn-sm" id="saveMessNameBtn">Save name</button>' +
+    '<hr style="margin:22px 0; border:none; border-top:1px solid var(--paper-line);">' +
+    '<p class="hint">Leaving removes this mess from this device only — everyone else\'s data is untouched, and you can rejoin any time with the Mess ID.</p>' +
+    '<button class="btn btn-ghost" id="leaveMessSettingsBtn">Leave this mess</button>';
+  document.getElementById('copyIdSettingsBtn').addEventListener('click', ()=>copyText(messId));
+  document.getElementById('saveMessNameBtn').addEventListener('click', async ()=>{
+    const val = document.getElementById('messNameInput').value.trim();
+    if(!val){ showToast('Mess name cannot be empty.', true); return; }
+    try{
+      await fbSaveConfig({ messName: val });
+      document.getElementById('messNameDisplay').textContent = val;
+      showToast('Mess name updated');
+    }catch(e){ showToast('Could not save. Check your connection.', true); }
+  });
+  document.getElementById('leaveMessSettingsBtn').addEventListener('click', ()=>{
+    closeSettings();
+    leaveMess();
+  });
+}
+function renderDangerPane(){
+  const el = document.getElementById('mpane-danger');
+  el.innerHTML =
+    '<p class="hint">This permanently deletes this mess: every member, meal record, guest meal, contribution and expense, plus the Mess ID itself. This cannot be undone, and no one will be able to use this ID again.</p>' +
+    '<button class="btn btn-danger" id="deleteMessBtn">Delete this mess forever</button>';
+  document.getElementById('deleteMessBtn').addEventListener('click', ()=>{
+    openConfirm('Delete "'+state.messName+'" forever?', 'This permanently deletes every member, meal record, guest meal, contribution and expense in this mess, and frees up the Mess ID. This cannot be undone.', async ()=>{
+      const btn = document.getElementById('confirmOkBtn');
+      btn.disabled = true;
+      try{
+        await fbDeleteMessCompletely();
+        closeSettings();
+        closeConfirm();
+        showToast('Mess deleted');
+        resetToLanding();
+      }catch(e){
+        showToast('Something went wrong deleting this mess.', true);
+        closeConfirm();
+      }
+      btn.disabled = false;
+    });
+  });
+}
+
+/* ---------------- Event delegation ---------------- */
+function bindStaticEvents(){
+  // Landing screen
+  document.getElementById('landingCreateBtn').addEventListener('click', ()=>{ showSetupScreen(); });
+  document.getElementById('joinMessIdInput').addEventListener('input', (e)=>{
+    e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  });
+  document.getElementById('landingJoinBtn').addEventListener('click', async (ev)=>{
+    const idInput = document.getElementById('joinMessIdInput');
+    const errEl = document.getElementById('joinIdError');
+    const id = idInput.value.trim();
+    errEl.classList.add('hidden');
+    if(id.length < 4){ errEl.textContent = 'Enter the Mess ID you were given.'; errEl.classList.remove('hidden'); return; }
+    const btn = ev.target;
+    btn.disabled = true;
+    try{
+      await enterMess(id);
+      showLoginScreen();
+    }catch(e){
+      errEl.textContent = 'That Mess ID was not found. Double-check it and try again.';
+      errEl.classList.remove('hidden');
+    }
+    btn.disabled = false;
+  });
+
+  // Setup screen (create mess)
+  document.getElementById('setupBackBtn').addEventListener('click', ()=>{ showLandingScreen(); });
+  document.getElementById('setupAddRowBtn').addEventListener('click', addSetupRow);
+  document.getElementById('setupSubmitBtn').addEventListener('click', async (ev)=>{
+    const nameVal = document.getElementById('setupMessName').value.trim();
+    const rows = document.querySelectorAll('.setup-member-row');
+    const membersToAdd = [];
+    rows.forEach(row=>{
+      const name = row.querySelector('.setup-name').value.trim();
+      const pin = row.querySelector('.setup-pin').value.trim();
+      if(name) membersToAdd.push({name, pin: /^\d{4}$/.test(pin) ? pin : ''});
+    });
+    if(membersToAdd.length===0){ showToast('Add at least one member.', true); return; }
+    const btn = ev.target;
+    btn.disabled = true;
+    try{
+      const newId = await fbCreateMess(nameVal || 'Our Mess', defaultCategories());
+      await enterMess(newId);
+      for(const m of membersToAdd){ await fbAddMember(m.name, m.pin); }
+      showToast('Mess created');
+      showMessCreatedScreen(newId);
+    }catch(e){
+      showToast('Could not create mess. Check your connection.', true);
+    }
+    btn.disabled = false;
+  });
+
+  // Mess created screen
+  document.getElementById('copyMessIdBtn').addEventListener('click', ()=>copyText(messId));
+  document.getElementById('continueToLoginBtn').addEventListener('click', ()=>{ showLoginScreen(); });
+
+  // Login screen
+  document.getElementById('loginBackBtn').addEventListener('click', ()=>{ resetToLanding(); });
+  document.getElementById('pinCancelBtn').addEventListener('click', ()=>{
+    pendingLoginMemberId = null;
+    document.getElementById('pinEntryBlock').classList.add('hidden');
+  });
+  document.getElementById('pinConfirmBtn').addEventListener('click', ()=>{
+    const val = document.getElementById('pinEntryInput').value.trim();
+    const m = state.members.find(x=>x.id===pendingLoginMemberId);
+    if(m && val === m.pin){
+      loginAs(m.id);
+    } else {
+      showToast('Incorrect PIN.', true);
+    }
+  });
+  document.getElementById('pinEntryInput').addEventListener('keydown', (e)=>{
+    if(e.key==='Enter') document.getElementById('pinConfirmBtn').click();
+  });
+
+  document.getElementById('settingsBtn').innerHTML = ICON.settings;
+  document.getElementById('closeSettingsBtn').innerHTML = ICON.close;
+  document.querySelectorAll('.tab-icon-slot').forEach(slot=>{
+    slot.innerHTML = ICON[slot.dataset.icon] || '';
+  });
+
+  document.getElementById('settingsBtn').addEventListener('click', openSettings);
+  document.getElementById('closeSettingsBtn').addEventListener('click', closeSettings);
+  document.getElementById('settingsModal').addEventListener('click', (e)=>{
+    if(e.target.id==='settingsModal') closeSettings();
+  });
+
+  document.getElementById('userChipBtn').addEventListener('click', ()=>{
+    document.getElementById('userMenu').classList.toggle('hidden');
+  });
+  document.addEventListener('click', (e)=>{
+    if(!e.target.closest('#userChipBtn') && !e.target.closest('#userMenu')){
+      document.getElementById('userMenu').classList.add('hidden');
+    }
+  });
+  document.getElementById('switchMemberBtn').addEventListener('click', ()=>{
+    document.getElementById('userMenu').classList.add('hidden');
+    logoutMember();
+  });
+  document.getElementById('leaveMessBtn').addEventListener('click', ()=>{
+    document.getElementById('userMenu').classList.add('hidden');
+    leaveMess();
+  });
+
+  document.getElementById('tabNav').addEventListener('click', (e)=>{
+    const btn = e.target.closest('.tab-btn');
+    if(btn) switchTab(btn.dataset.tab);
+  });
+
+  document.querySelectorAll('.modal-tab-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>switchSettingsTab(btn.dataset.mtab));
+  });
+
+  document.getElementById('confirmCancelBtn').addEventListener('click', closeConfirm);
+  document.getElementById('confirmOkBtn').addEventListener('click', ()=>{
+    if(confirmCallback) confirmCallback();
+  });
+  document.getElementById('confirmModal').addEventListener('click', (e)=>{
+    if(e.target.id==='confirmModal') closeConfirm();
+  });
+
+  document.getElementById('connErrorRetryBtn').addEventListener('click', ()=>{
+    document.getElementById('connErrorScreen').classList.add('hidden');
+    document.getElementById('loadingOverlay').classList.remove('hidden');
+    init();
+  });
+
+  window.addEventListener('online', ()=>setSyncDot(true));
+  window.addEventListener('offline', ()=>setSyncDot(false));
+
+  document.addEventListener('click', handleDelegatedClick);
+}
+
+function handleDelegatedClick(e){
+  const btn = e.target.closest('[data-action]');
+  if(!btn) return;
+  const action = btn.dataset.action;
+  const id = btn.dataset.id;
+
+  if(action==='toggleMeal'){ toggleMeal(btn.dataset.mid, btn.dataset.slot); }
+
+  else if(action==='editGuest'){ editing.guest = id; renderGuests(); window.scrollTo({top:0, behavior:'smooth'}); }
+  else if(action==='deleteGuest'){
+    openConfirm('Delete guest meal?', 'This entry will be removed for everyone in the mess.', async ()=>{
+      try{ await fbDeleteGuestMeal(id); showToast('Guest meal deleted'); }
+      catch(err){ showToast('Could not delete. Check your connection.', true); }
+      closeConfirm();
+      renderGuests();
+    });
+  }
+
+  else if(action==='editContrib'){ editing.contrib = id; renderFund(); window.scrollTo({top:0, behavior:'smooth'}); }
+  else if(action==='deleteContrib'){
+    openConfirm('Delete contribution?', 'This entry will be removed for everyone in the mess.', async ()=>{
+      try{ await fbDeleteContribution(id); showToast('Contribution deleted'); }
+      catch(err){ showToast('Could not delete. Check your connection.', true); }
+      closeConfirm();
+      renderFund();
+    });
+  }
+
+  else if(action==='editExpense'){ editing.expense = id; renderExpenses(); window.scrollTo({top:0, behavior:'smooth'}); }
+  else if(action==='deleteExpense'){
+    openConfirm('Delete expense?', 'This entry will be removed for everyone in the mess.', async ()=>{
+      try{ await fbDeleteExpense(id); showToast('Expense deleted'); }
+      catch(err){ showToast('Could not delete. Check your connection.', true); }
+      closeConfirm();
+      renderExpenses();
+    });
+  }
+
+  else if(action==='editMember'){ editing.member = id; renderMembersPane(); }
+  else if(action==='cancelMemberEdit'){ editing.member = null; renderMembersPane(); }
+  else if(action==='saveMemberEdit'){ saveMemberEdit(id); }
+  else if(action==='deleteMember'){
+    const m = state.members.find(x=>x.id===id);
+    openConfirm('Remove '+(m?m.name:'this member')+'?', 'Their past records stay in the ledger, but they won\'t be selectable for new entries or logins.', async ()=>{
+      try{ await fbDeleteMember(id); showToast('Member removed'); }
+      catch(err){ showToast('Could not remove. Check your connection.', true); }
+      closeConfirm();
+      renderMembersPane();
+    });
+  }
+
+  else if(action==='deleteCategory'){
+    const cat = btn.dataset.cat;
+    openConfirm('Remove category?', '"'+cat+'" will no longer appear when logging new expenses.', async ()=>{
+      try{ await fbSaveConfig({ categories: state.categories.filter(c=>c!==cat) }); showToast('Category removed'); }
+      catch(err){ showToast('Could not save. Check your connection.', true); }
+      closeConfirm();
+      renderCategoriesPane();
+    });
+  }
+}
+
+/* ---------------- Service worker registration ---------------- */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+  });
+}
+
+init();
+</script>
+</body>
+</html>
